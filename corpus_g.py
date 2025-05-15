@@ -14,14 +14,14 @@ def add_wikipedia_article(topic):
     import wikipedia
     wikipedia.set_lang("en")
     try:
-        article = wikipedia.page(topic)
+        article = wikipedia.page(topic, auto_suggest=False)
         return article.content
     except Exception as e:
         print(f"Failed to fetch article: {e}")
         return ""
 
 text = ""
-text += add_wikipedia_article("banana")
+text += add_wikipedia_article("Banana (fruit)")
 if not text.strip():
     print("No text fetched from Wikipedia. Check topic name or internet connection.")
 
@@ -39,7 +39,27 @@ def colorize(text, color="red"):
     return f"{color_codes.get(color, '')}{text}{color_codes['end']}"
 
 
-# tokens
+# SORTED BY OCCURRENCE ORDER
+def kwic_sorted_by_occurrence(text, search_words, window, color):
+    tokens = re.findall(r"\b\w+\b", text)
+    target_tokens = search_words.split()
+    n = len(target_tokens)
+
+    kwic_list = []
+
+    for i in range(len(tokens) - n + 1):
+        if tokens[i : i + n] == target_tokens:
+            start = max(0, i - window)
+            end = min(len(tokens), i + n + window)
+            left = tokens[start:i]
+            match = colorize(" ".join(tokens[i : i + n]), color)
+            right = tokens[i + n : end]
+            kwic_string = " ".join(left + [match] + right)
+            kwic_list.append(kwic_string)
+
+    return kwic_list
+
+# NEXT TOKEN FREQUENCY
 def kwic_sorted_by_next_token(text, search_words, window, color):
     tokens = re.findall(r"\b\w+\b", text)
     target_tokens = search_words.split()
@@ -66,40 +86,6 @@ def kwic_sorted_by_next_token(text, search_words, window, color):
         sorted_kwic.extend(kwic_by_next_token[word])
 
     return sorted_kwic, next_token_counter
-
-
-# POS tags
-def kwic_noun_pos_filter(text, search_words, window, color):
-    tokens = nltk.word_tokenize(text)
-    pos_tags = nltk.pos_tag(tokens)
-    target_tokens = search_words.split()
-    n = len(target_tokens)
-
-    proper_nouns = []
-    common_nouns = []
-
-    for i in range(len(tokens) - n + 1):
-        if tokens[i : i + n] == target_tokens:
-            next_index = i + n
-            if next_index < len(pos_tags):
-                word, tag = pos_tags[next_index]
-
-                if tag in ["NNP", "NNPS"]:
-                    noun_list = proper_nouns
-                elif tag in ["NN", "NNS"]:
-                    noun_list = common_nouns
-                else:
-                    continue  # 名詞以外はスキップ
-
-                start = max(0, i - window)
-                end = min(len(tokens), i + n + window + 1)
-                left = tokens[start:i]
-                match = colorize(" ".join(tokens[i : i + n]), color)
-                right = tokens[i + n : end]
-                kwic_string = " ".join(left + [match] + right)
-                noun_list.append("... " + kwic_string + " ...")
-
-    return proper_nouns, common_nouns
 
 # entity
 def extract_entities(text, search_words, window, color):
@@ -131,58 +117,31 @@ def extract_entities(text, search_words, window, color):
 
     return entities
 
-
-# # test text
-# text = (
-#     "The KWIC tool is useful for linguistics. "
-#     "We implemented a KWIC search in Python. "
-#     "This KWIC function highlights context. "
-#     "KWIC results are often used in corpus linguistics. "
-#     "A KWIC display is commonly used in text analysis. "
-#     "Many researchers use KWIC to find patterns. "
-#     "KWIC, can be helpful for textual data processing. "
-#     "KWIC is useful. "
-#     "KWIC helps researchers. "
-#     "KWIC helps analysts. "
-#     "KWIC provides context. "
-#     "KWIC helps students. "
-#     "KWIC is powerful. "
-#     "KWIC is helpful. "
-#     "KWIC helps developers. "
-#     "KWIC shows context. "
-#     "KWIC helps professionals. "
-#     "banana Microsoft designs software for linguists. "
-#     "banana Emma studies language data with KWIC tools. "
-#     "banana Google supports open-source NLP research. "
-#     "banana John works on computational linguistics at MIT. "
-#     "banana teachers use KWIC to analyze student responses. "
-#     "banana researchers publish papers about linguistics. "
-#     "banana linguists study syntax and semantics in depth. "
-#     "banana students attend workshops on natural language processing. "
-#     "banana engineers develop NLP applications. "
-#     "banana tools are essential for annotation tasks. "
-#     "banana technology advances language understanding. "
-#     "banana researchers contribute to academic journals. "
-#     "banana models improve semantic analysis. "
-#     "banana systems process large corpora. "
-#     "banana syntax reveals grammatical patterns. "
-#     "banana software supports linguistic annotation. "
-#     "banana teams collaborate on open-source projects. "
-#     "banana methods help in discourse analysis. "
-# )
-
 def main():
     while True:
         
         print("\n=== MENU ===")
-        print("1: tokens (Sort in order of frequency of occurrence)")
-        print("2: POS tags (Separate nouns into proper nouns and common nouns)")
+        print("1: Sort by occurrence order")
+        print("2: Sort in order of frequency of occurrence")
         print("3: entity")
         print("4: exit")
         choice = input("Please choose your search type from 3 options(1〜4): ")
 
         if choice == "1":
-            search_words = input("\nPlease enter a search term (e.g. KWIC): ")
+            search_words = input("\nPlease enter a search term (e.g. banana): ")
+            window = int(
+                input("Please enter the window size (number of words to display before and after) (e.g. 2): "))
+            color = input("Please enter a color for the search term (e.g. red, green, yellow, blue, magenta, cyan, end): ")
+
+            results = kwic_sorted_by_occurrence(text, search_words=search_words, window=window, color=color)
+
+            print("\n[KWIC RESULTS SORTED BY OCCURRENCE ORDER]\n")
+            for r in results:
+               print("... " + r + " ...")
+
+
+        if choice == "2":
+            search_words = input("\nPlease enter a search term (e.g. banana): ")
             window = int(
                 input("Please enter the window size (number of words to display before and after) (e.g. 2): "))
             color = input("Please enter a color for the search term (e.g. red, green, yellow, blue, magenta, cyan, end): ")
@@ -193,24 +152,8 @@ def main():
             for r in results:
                 print("... " + r + " ...")
 
-        elif choice == "2":
-            search_words = input("\nPlease enter a search term (e.g. KWIC): ")
-            window = int(
-                input("Please enter the window size (number of words to display before and after) (e.g. 2): "))
-            color = input("Please enter a color for the search term (e.g. red, green, yellow, blue, magenta, cyan, end): ")
-
-            proper, common = kwic_noun_pos_filter(text, search_words=search_words, window=window, color=color)
-
-            print("\n[KWIC RESULTS FOLLOWED BY PROPER NOUNS]\n")
-            for p in proper:
-                print(p)
-
-            print("\n[KWIC RESULTS FOLLOWED BY COMMON NOUNS]\n")
-            for c in common:
-                print(c)
-
         elif choice == "3":
-            search_words = input("\nPlease enter a search term (e.g. KWIC): ")
+            search_words = input("\nPlease enter a search term (e.g. banana): ")
 
             window = int(
                 input("Please enter the window size (number of words to display before and after) (e.g. 2): "))
