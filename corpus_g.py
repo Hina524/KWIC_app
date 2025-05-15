@@ -87,35 +87,41 @@ def kwic_sorted_by_next_token(text, search_words, window, color):
 
     return sorted_kwic, next_token_counter
 
-# entity
-def extract_entities(text, search_words, window, color):
+# POS tags
+def kwic_pos_filter(text, search_words, window, color):
     tokens = nltk.word_tokenize(text)
-    tagged_tokens = nltk.pos_tag(tokens)  # ここで品詞付きトークンを取得
-
-    entities = defaultdict(list)
+    pos_tags = nltk.pos_tag(tokens)
     target_tokens = search_words.split()
     n = len(target_tokens)
 
+    verbs = []
+    nouns = []
+    adjectives = []
+
     for i in range(len(tokens) - n + 1):
         if tokens[i:i + n] == target_tokens:
-            # 次の単語の品詞が名詞かチェック
             next_index = i + n
-            if next_index < len(tagged_tokens):
-                next_word, next_pos = tagged_tokens[next_index]
-                if next_pos.startswith("NN"):  # 名詞（NN, NNS, NNP, NNPSなど）
-                    start = max(0, i - window)
-                    end = min(len(tokens), i + n + window + 1)
-                    
-                    left = tokens[start:i]
-                    match = colorize(" ".join(tokens[i:i + n]), color)
-                    right = tokens[i + n:end]
-                    kwic_string = " ".join(left + [match] + right)
+            if next_index < len(pos_tags):
+                word, tag = pos_tags[next_index]
 
-                    entities[next_word].append(
-                        f"... {kwic_string} ..."
-                    )
+                if tag.startswith("VB"):      # 動詞
+                    result_list = verbs
+                elif tag.startswith("NN"):    # 名詞
+                    result_list = nouns
+                elif tag.startswith("JJ"):    # 形容詞
+                    result_list = adjectives
+                else:
+                    continue  # 対象品詞でなければスキップ
 
-    return entities
+                start = max(0, i - window)
+                end = min(len(tokens), i + n + window + 1)
+                left = tokens[start:i]
+                match = colorize(" ".join(tokens[i:i + n]), color)
+                right = tokens[i + n:end]
+                kwic_string = " ".join(left + [match] + right)
+                result_list.append("... " + kwic_string + " ...")
+
+    return verbs, nouns, adjectives
 
 def main():
     while True:
@@ -123,7 +129,7 @@ def main():
         print("\n=== MENU ===")
         print("1: Sort by occurrence order")
         print("2: Sort in order of frequency of occurrence")
-        print("3: entity")
+        print("3: POS tags")
         print("4: exit")
         choice = input("Please choose your search type from 3 options(1〜4): ")
 
@@ -154,17 +160,23 @@ def main():
 
         elif choice == "3":
             search_words = input("\nPlease enter a search term (e.g. banana): ")
-
-            window = int(
-                input("Please enter the window size (number of words to display before and after) (e.g. 2): "))
+            window = int(input("Please enter the window size (e.g. 2): "))
             color = input("Please enter a color for the search term (e.g. red, green, yellow, blue, magenta, cyan, end): ")
 
-            entities = extract_entities(text, search_words, window, color)
+            verbs, nouns, adjectives = kwic_pos_filter(text, search_words, window, color)
 
-            print("\n[KWIC RESULTS FOLLOWED BY ENTITIES]\n")
-            for entity, responses in entities.items():
-                for response in responses:
-                    print(response)
+            print("\n<VERBS>")
+            for v in verbs:
+                print(v)
+
+            print("\n<NOUNS>")
+            for n in nouns:
+                print(n)
+
+            print("\n<ADJECTIVES>")
+            for adj in adjectives:
+                print(adj)
+
 
 
         elif choice == "4":
