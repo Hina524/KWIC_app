@@ -177,8 +177,6 @@ def main():
             for adj in adjectives:
                 print(adj)
 
-
-
         elif choice == "4":
             print("exit program")
             break
