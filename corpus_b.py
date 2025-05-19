@@ -61,7 +61,7 @@ def kwic_grouped_by_pos_and_sorted(text, search_words, window=5, color="red"):
                 continue
 
             start = max(0, i - window)
-            end = min(len(tokens), i + n + window + 1)
+            end = min(len(tokens), i + n + window)
             left = tokens[start:i]
             match = colorize(" ".join(tokens[i:i + n]), color)
             right = tokens[i + n:end]
