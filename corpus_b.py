@@ -2,24 +2,31 @@
 import re
 import nltk
 from collections import defaultdict, Counter
+from janome.tokenizer import Tokenizer
+import logging
 
-nltk.download("punkt")
-nltk.download("averaged_perceptron_tagger")
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def add_wikipedia_article(topic):
+def add_wikipedia_article(topic, language='en'):
     import wikipedia
-    wikipedia.set_lang("en")
     try:
+        if language == 'ja':
+            wikipedia.set_lang("ja")
+            logging.info(f"Wikipedia言語設定: 日本語")
+        else:
+            wikipedia.set_lang("en")
+            logging.info(f"Wikipedia言語設定: 英語")
         article = wikipedia.page(topic, auto_suggest=False)
+        logging.info(f"記事タイトル: {article.title}, 長さ: {len(article.content)}")
         return article.content
     except Exception as e:
-        print(f"Failed to fetch article: {e}")
+        logging.error(f"Failed to fetch article: {e}")
         return ""
 
 text = ""
 text += add_wikipedia_article("Banana (fruit)")
 if not text.strip():
-    print("No text fetched from Wikipedia. Check topic name or internet connection.")
+    logging.warning("No text fetched from Wikipedia. Check topic name or internet connection.")
 
 def colorize(text, color="red"):
     color_codes = {
@@ -33,11 +40,121 @@ def colorize(text, color="red"):
     }
     return f"{color_codes.get(color, '')}{text}{color_codes['end']}"
 
-def kwic_grouped_by_pos_and_sorted(text, search_words, window=5, color="red"):
+def kwic_grouped_by_pos_and_sorted(text, search_words, window=5, color="red", language='en'):
+    logging.info(f"検索ワード: {search_words}, ウィンドウサイズ: {window}, 言語: {language}")
+    if language == 'ja':
+        return kwic_japanese(text, search_words, window, color)
+    else:
+        return kwic_english(text, search_words, window, color)
+
+def kwic_japanese(text, search_words, window=5, color="red"):
+    logging.info("日本語KWICを実行")
+    tokenizer = Tokenizer()
+    tokens = [token.surface for token in tokenizer.tokenize(text)]
+    logging.info(f"トークン数: {len(tokens)}")
+    
+    pos_tags = [(token.surface, token.part_of_speech.split(',')[0]) for token in tokenizer.tokenize(text)]
+    
+    search_tokens = [token.surface for token in tokenizer.tokenize(search_words)]
+    logging.info(f"検索ワードトークン: {search_tokens}")
+    
+    if not search_tokens:
+        logging.warning("検索ワードのトークンが見つかりません")
+        search_tokens = [search_words]
+    
+    n = len(search_tokens)
+    logging.info(f"検索ワード長: {n}")
+
+    pos_category_map = {
+        '動詞': 'VERBS',
+        '名詞': 'NOUNS',
+        '形容詞': 'ADJECTIVES',
+    }
+
+    grouped_kwic = defaultdict(lambda: defaultdict(list))
+    freq_by_pos = defaultdict(Counter)
+    match_count = 0
+
+    for i in range(len(tokens) - n + 1):
+        match = True
+        for j in range(n):
+            if i+j >= len(tokens) or search_tokens[j] != tokens[i+j]:
+                match = False
+                break
+                
+        if match:
+            match_count += 1
+            next_index = i + n
+            if next_index >= len(tokens):
+                continue
+
+            next_token, next_tag = pos_tags[next_index]
+            category = pos_category_map.get(next_tag)
+            if not category:
+                continue
+
+            start = max(0, i - window)
+            end = min(len(tokens), i + n + window)
+            left = tokens[start:i]
+            match_text = colorize("".join(tokens[i:i + n]), color)
+            right = tokens[i + n:end]
+            kwic_line = "".join(left) + match_text + "".join(right)
+
+            grouped_kwic[category][next_token].append(kwic_line)
+            freq_by_pos[category][next_token] += 1
+
+    logging.info(f"マッチ数: {match_count}")
+    if match_count == 0:
+        logging.info("部分一致検索を実行")
+        for i in range(len(tokens)):
+            for search_token in search_tokens:
+                if search_token in tokens[i]:
+                    match_count += 1
+                    if i + 1 >= len(tokens):
+                        continue
+                        
+                    next_token, next_tag = pos_tags[i + 1]
+                    category = pos_category_map.get(next_tag)
+                    if not category:
+                        continue
+
+                    start = max(0, i - window)
+                    end = min(len(tokens), i + 1 + window)
+                    left = tokens[start:i]
+                    match_text = colorize(tokens[i], color)
+                    right = tokens[i + 1:end]
+                    kwic_line = "".join(left) + match_text + "".join(right)
+
+                    grouped_kwic[category][next_token].append(kwic_line)
+                    freq_by_pos[category][next_token] += 1
+        
+        logging.info(f"部分一致検索マッチ数: {match_count}")
+
+    sorted_categories = sorted(
+        freq_by_pos.items(),
+        key=lambda item: sum(item[1].values()),
+        reverse=True
+    )
+
+    for category, token_counter in sorted_categories:
+        print(f"\n<{category}>")
+        for next_token, _ in token_counter.most_common():
+            for kwic in grouped_kwic[category][next_token]:
+                print("...", kwic, "...")
+                
+    return match_count > 0
+
+def kwic_english(text, search_words, window=5, color="red"):
+    logging.info("英語KWICを実行")
     tokens = nltk.word_tokenize(text)
+    logging.info(f"トークン数: {len(tokens)}")
+    
     pos_tags = nltk.pos_tag(tokens)
     target_tokens = search_words.split()
+    logging.info(f"検索ワードトークン: {target_tokens}")
+    
     n = len(target_tokens)
+    logging.info(f"検索ワード長: {n}")
 
     pos_category_map = {
         'VB': 'VERBS',
@@ -47,9 +164,11 @@ def kwic_grouped_by_pos_and_sorted(text, search_words, window=5, color="red"):
 
     grouped_kwic = defaultdict(lambda: defaultdict(list))
     freq_by_pos = defaultdict(Counter)
+    match_count = 0
 
     for i in range(len(tokens) - n):
         if tokens[i:i + n] == target_tokens:
+            match_count += 1
             next_index = i + n
             if next_index >= len(tokens):
                 continue
@@ -70,6 +189,34 @@ def kwic_grouped_by_pos_and_sorted(text, search_words, window=5, color="red"):
             grouped_kwic[category][next_token].append(kwic_line)
             freq_by_pos[category][next_token] += 1
 
+    logging.info(f"マッチ数: {match_count}")
+    if match_count == 0:
+        logging.info("部分一致検索を実行")
+        for i in range(len(tokens)):
+            for search_token in target_tokens:
+                if search_token.lower() in tokens[i].lower():
+                    match_count += 1
+                    if i + 1 >= len(tokens):
+                        continue
+                    
+                    next_token, next_tag = pos_tags[i + 1]
+                    pos_prefix = next_tag[:2]
+                    category = pos_category_map.get(pos_prefix)
+                    if not category:
+                        continue
+
+                    start = max(0, i - window)
+                    end = min(len(tokens), i + 2 + window)
+                    left = tokens[start:i]
+                    match = colorize(tokens[i], color)
+                    right = tokens[i + 1:end]
+                    kwic_line = " ".join(left + [match] + right)
+
+                    grouped_kwic[category][next_token].append(kwic_line)
+                    freq_by_pos[category][next_token] += 1
+        
+        logging.info(f"部分一致検索マッチ数: {match_count}")
+
     sorted_categories = sorted(
         freq_by_pos.items(),
         key=lambda item: sum(item[1].values()),
@@ -81,14 +228,17 @@ def kwic_grouped_by_pos_and_sorted(text, search_words, window=5, color="red"):
         for next_token, _ in token_counter.most_common():
             for kwic in grouped_kwic[category][next_token]:
                 print("...", kwic, "...")
+                
+    return match_count > 0
 
 def main():
     search_words = input("Please enter a search term (e.g. bananas are): ")
     window = int(input("Please enter the window size (e.g. 5): "))
     color = input("Please enter a color for the search term (e.g. red, green, yellow, blue, magenta, cyan): ")
+    language = input("Please enter the language (en or ja): ")
 
     if text:
-        kwic_grouped_by_pos_and_sorted(text, search_words, window=window, color=color)
+        kwic_grouped_by_pos_and_sorted(text, search_words, window=window, color=color, language=language)
 
 
 if __name__ == "__main__":
