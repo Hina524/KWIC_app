@@ -1,7 +1,6 @@
 import nltk
-nltk.data.path.append("./.venv/nltk_data")  # 必要に応じて追加
+nltk.data.path.append("./.venv/nltk_data")
 
-# リソースがない場合のために再ダウンロード
 nltk.download("punkt")
 nltk.download("averaged_perceptron_tagger")
 
